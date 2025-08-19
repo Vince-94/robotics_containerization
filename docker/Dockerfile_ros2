@@ -1,0 +1,228 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2025 Ruotolo Vincenzo. All rights reserved.
+#
+# This software is proprietary and licensed, not sold. See the LICENSE.md file
+# in the project root for the full license terms.
+#
+# Unauthorized copying, distribution, modification, or resale of this file,
+# via any medium, is strictly prohibited without prior written permission.
+# -----------------------------------------------------------------------------
+#! base-stage
+ARG BASE_IMAGE
+FROM $BASE_IMAGE AS base-stage
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ARG CONTAINER_USR=docker
+ARG CONTAINER_PSW=password
+ARG CONTAINER_UID=1000
+ARG CONTAINER_GID=1000
+
+ENV CONTAINER_USR=$CONTAINER_USR
+ENV CONTAINER_UID=$CONTAINER_UID
+ENV CONTAINER_GID=$CONTAINER_GID
+
+
+# Create or update user and group, set password, add to groups, enable passwordless sudo
+RUN set -eux; \
+    # 1) See if a user with that UID already exists:
+    EXISTING_USER="$(getent passwd "${CONTAINER_UID}" | cut -d: -f1)"; \
+    if [ -n "$EXISTING_USER" ]; then \
+        # 2a) Find its primary group name
+        EXISTING_GROUP="$(id -gn "$EXISTING_USER")"; \
+        # 2b) Rename user & group, move home
+        usermod -l "${CONTAINER_USR}" -d "/home/${CONTAINER_USR}" -m "$EXISTING_USER"; \
+        groupmod -n "${CONTAINER_USR}" "$EXISTING_GROUP"; \
+        # Now our 'docker' user has UID=1000 and group 'docker' GID=1000
+    else \
+        # 3) No such UID: create group & user from scratch
+        groupadd --gid "${CONTAINER_GID}" "${CONTAINER_USR}"; \
+        useradd --create-home \
+                --uid "${CONTAINER_UID}" \
+                --gid "${CONTAINER_GID}" \
+                --shell /bin/bash \
+                "${CONTAINER_USR}"; \
+    fi; \
+    # 4) Set password & supplementary groups
+    echo "${CONTAINER_USR}:${CONTAINER_PSW}" | chpasswd; \
+    usermod -aG sudo,dialout,tty,audio,video "${CONTAINER_USR}"; \
+    # 5) Passwordless sudo
+    mkdir -p /etc/sudoers.d; \
+    echo "${CONTAINER_USR} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${CONTAINER_USR}"; \
+    chmod 0440 /etc/sudoers.d/"${CONTAINER_USR}"
+
+
+########################
+# INSTALL DEPENDENCIES #
+########################
+
+# Update
+RUN apt update && apt upgrade -y
+
+RUN apt install --quiet -y \
+    sudo software-properties-common lsb-release
+RUN add-apt-repository universe
+
+# Ubuntu deps
+RUN apt install --quiet -y \
+    apt-transport-https ca-certificates gnupg gnupg2 gnupg-agent libssl-dev \
+    git curl file wget zip unzip pkg-config openssh-client openssh-server \
+    xterm tmux gdb valgrind \
+    htop net-tools nmap lynx \
+    libx11-dev vim iputils-ping
+
+RUN apt install --quiet -y \
+    bash-completion
+RUN echo "source /usr/share/bash-completion/completions/git" >> ~/.bashrc
+
+# C++ deps
+RUN apt install --quiet -y \
+    build-essential clang cmake ccache ninja-build
+
+# C++ linter
+RUN apt install --quiet -y \
+    clang-tidy clang-tools \
+    cppcheck \
+    astyle
+
+# C++ testing deps
+RUN apt install --quiet -y libgtest-dev libgmock-dev lcov
+
+# C++ common lib
+RUN apt install --quiet -y \
+    libboost-all-dev \
+    libeigen3-dev
+
+# Python deps
+RUN apt install --quiet -y \
+    python3 python3-dev python3-pip python3-future
+
+# Python linter
+RUN apt install --quiet -y pylint
+
+# Python test libs
+RUN apt install --quiet -y python3-pytest
+
+# Python utils libs
+RUN apt install --quiet -y \
+    python3-pandas
+
+RUN apt install --quiet -y \
+    python3-pandas \
+    python3-jsonschema \
+    python3-jinja2 \
+    python3-toml \
+    python3-colorlog
+
+# Install OpenBLAS (high‑performance dense linear algebra)
+RUN if dpkg --print-architecture | grep -q "arm"; then \
+        apt update && apt install -y libopenblas-dev; \
+    fi
+
+# Installing ROS2
+RUN apt install --quiet -y ros-dev-tools
+
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
+
+ENV RCUTILS_COLORIZED_OUTPUT=1
+ENV RCUTILS_LOGGING_USE_STDOUT=1
+ENV RCUTILS_LOGGING_BUFFERED_STREAM=1
+
+# Install ROS2 diagnostics
+RUN apt install --quiet -y ros-${ROS_DISTRO}-diagnostic-updater
+
+# Install ROS2 linters
+RUN apt install --quiet -y \
+    ros-${ROS_DISTRO}-ament-cmake-mypy \
+    ros-${ROS_DISTRO}-ament-cmake-black \
+    ros-${ROS_DISTRO}-ament-cmake-clang-tidy \
+    ros-${ROS_DISTRO}-ament-cmake-clang-format
+
+# cyclictest
+RUN apt install --quiet -y rt-tests
+
+# ros2_tracing
+RUN apt install --quiet -y lttng-tools liblttng-ust-dev python3-lttng python3-babeltrace babeltrace
+RUN apt install --quiet -y ros-${ROS_DISTRO}-tracetools
+
+
+#! develop-stage
+FROM base-stage AS develop-stage
+
+# Update
+RUN apt update && apt upgrade -y
+
+# Ignition/Gazebo
+RUN wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+RUN apt update
+RUN apt install -y gz-harmonic
+RUN apt install -y ros-${ROS_DISTRO}-ros-gz
+ENV GZ_VERSION=harmonic
+
+# Foxglove Studio
+RUN LATEST_FOXGLOVE_URL=$(curl -s https://api.github.com/repos/foxglove/studio/releases/latest | grep "browser_download_url.*linux-amd64.deb" | cut -d '"' -f 4) && \
+    wget $LATEST_FOXGLOVE_URL -O foxglove-studio-latest.deb
+RUN apt install -y ./foxglove-studio-latest.deb
+RUN apt install -y ros-${ROS_DISTRO}-foxglove-bridge
+RUN rm foxglove-studio-latest.deb
+
+# Plotjuggler
+RUN apt install -y --quiet ros-${ROS_DISTRO}-plotjuggler-ros
+
+# QEMU for ARM emulation
+RUN apt update && apt install -y qemu-user-static
+RUN wget -O /usr/bin/qemu-aarch64-static https://github.com/multiarch/qemu-user-static/releases/latest/download/qemu-aarch64-static
+RUN chmod +x /usr/bin/qemu-aarch64-static
+RUN apt install -y gcc-aarch64-linux-gnu
+ENV CROSS_COMPILE=aarch64-linux-gnu-
+
+# TODO: Insert dependencies within this block
+#* ##########################################
+#*
+#* ##########################################
+
+# Clean
+USER root
+RUN apt -y autoremove && apt clean autoclean \
+	&& rm -rf /var/lib/apt/lists/{apt,dpkg,cache,log} /tmp/* /var/tmp/*
+
+# Set user
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+# Set entrypoint
+COPY ./docker/entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+
+ENV force_color_prompt=yes
+CMD ["bash"]
+
+
+#! deploy-stage
+FROM base-stage AS deploy-stage
+
+# Update
+RUN apt update && apt upgrade -y
+
+# TODO: Insert dependencies within this block
+#* ##########################################
+#*
+#* ##########################################
+
+# Clean
+USER root
+RUN apt -y autoremove && apt clean autoclean \
+	&& rm -rf /var/lib/apt/lists/{apt,dpkg,cache,log} /tmp/* /var/tmp/*
+
+# Set user
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+# Set entrypoint
+COPY ./docker/entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+
+ENV force_color_prompt=yes
+CMD ["bash"]
