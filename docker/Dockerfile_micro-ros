@@ -1,0 +1,189 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2025 Ruotolo Vincenzo. All rights reserved.
+#
+# This software is proprietary and licensed, not sold. See the LICENSE.md file
+# in the project root for the full license terms.
+#
+# Unauthorized copying, distribution, modification, or resale of this file,
+# via any medium, is strictly prohibited without prior written permission.
+# -----------------------------------------------------------------------------
+#! base-stage
+ARG BASE_IMAGE
+FROM $BASE_IMAGE AS base-stage
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ARG CONTAINER_USR=docker
+ARG CONTAINER_PSW=password
+ARG CONTAINER_UID=1000
+ARG CONTAINER_GID=1000
+
+ENV CONTAINER_USR=$CONTAINER_USR
+ENV CONTAINER_UID=$CONTAINER_UID
+ENV CONTAINER_GID=$CONTAINER_GID
+
+
+# Create or update user and group, set password, add to groups, enable passwordless sudo
+RUN set -eux; \
+    # 1) See if a user with that UID already exists:
+    EXISTING_USER="$(getent passwd "${CONTAINER_UID}" | cut -d: -f1)"; \
+    if [ -n "$EXISTING_USER" ]; then \
+        # 2a) Find its primary group name
+        EXISTING_GROUP="$(id -gn "$EXISTING_USER")"; \
+        # 2b) Rename user & group, move home
+        usermod -l "${CONTAINER_USR}" -d "/home/${CONTAINER_USR}" -m "$EXISTING_USER"; \
+        groupmod -n "${CONTAINER_USR}" "$EXISTING_GROUP"; \
+        # Now our 'docker' user has UID=1000 and group 'docker' GID=1000
+    else \
+        # 3) No such UID: create group & user from scratch
+        groupadd --gid "${CONTAINER_GID}" "${CONTAINER_USR}"; \
+        useradd --create-home \
+                --uid "${CONTAINER_UID}" \
+                --gid "${CONTAINER_GID}" \
+                --shell /bin/bash \
+                "${CONTAINER_USR}"; \
+    fi; \
+    # 4) Set password & supplementary groups
+    echo "${CONTAINER_USR}:${CONTAINER_PSW}" | chpasswd; \
+    usermod -aG sudo,dialout,tty,audio,video "${CONTAINER_USR}"; \
+    # 5) Passwordless sudo
+    mkdir -p /etc/sudoers.d; \
+    echo "${CONTAINER_USR} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/"${CONTAINER_USR}"; \
+    chmod 0440 /etc/sudoers.d/"${CONTAINER_USR}"
+
+
+########################
+# INSTALL DEPENDENCIES #
+########################
+
+# Common system + build dependencies that are safe to have in base
+RUN apt update && apt upgrade -y
+
+RUN apt install -y --no-install-recommends \
+    locales ca-certificates gnupg2 curl lsb-release apt-transport-https \
+    wget unzip software-properties-common sudo \
+    build-essential git cmake pkg-config cmake-data \
+    python3 python3-pip python3-venv python3-dev \
+    python3-setuptools python3-wheel \
+    ca-certificates \
+    udev usbutils socat rsync jq
+
+RUN locale-gen en_US.UTF-8 || true; \
+    update-locale LANG=en_US.UTF-8
+
+# Try install from apt, otherwise install via pip (fallback)
+RUN if apt install -y --no-install-recommends python3-colcon-common-extensions python3-vcstool python3-argcomplete; then \
+        echo "colcon/vcstool installed via apt"; \
+    else \
+        pip3 install --no-cache-dir -U colcon-common-extensions vcstool argcomplete || true; \
+    fi
+
+# Some handy python tools used in micro-ROS workflows
+RUN apt install -y --no-install-recommends \
+    python3-rosdep \
+    python3-serial \
+    python3-empy \
+    python3-lark
+
+
+# enable argcomplete for bash
+RUN activate-global-python-argcomplete
+
+# rosdep: if package available via apt, ensure database exists (safe even in CI)
+RUN if command -v rosdep >/dev/null 2>&1; then \
+        rosdep update || true; \
+    fi;
+
+
+#! develop-stage
+FROM base-stage AS develop-stage
+
+# Update
+RUN apt update && apt upgrade -y
+
+# Install development packages (build, cross, flash, debug)
+RUN apt install -y --no-install-recommends \
+    cmake build-essential ninja-build gdb gdb-multiarch lcov \
+    clang-format clang-tidy doxygen graphviz valgrind \
+    pkg-config git-core curl wget unzip
+
+# Cross toolchain & flashing utilities
+RUN apt install -y --no-install-recommends \
+    gcc-arm-none-eabi binutils-arm-none-eabi gdb-multiarch \
+    openocd dfu-util avrdude esptool
+
+# Utilities for debugging and inspecting USB/serial
+RUN apt install -y --no-install-recommends \
+    minicom screen strace lsof tree pciutils usbutils
+
+# Python tooling
+RUN apt install -y --no-install-recommends \
+    python3-rosdep \
+    python3-colcon-argcomplete \
+    python3-colcon-*
+
+# TODO: Insert dependencies within this block
+#* ##########################################
+#*
+#* ##########################################
+
+# Clean
+USER root
+RUN apt -y autoremove && apt clean autoclean \
+	&& rm -rf /var/lib/apt/lists/{apt,dpkg,cache,log} /tmp/* /var/tmp/*
+
+# Set user
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+# Set entrypoint
+COPY ./docker/entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Source utils
+RUN echo "source /usr/share/bash-completion/completions/git" >> ~/.bashrc
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
+
+ENV force_color_prompt=yes
+CMD ["bash"]
+
+
+#! deploy-stage
+FROM base-stage AS deploy-stage
+
+# Update
+RUN apt update && apt upgrade -y
+
+# Install minimal runtime dependencies for micro-ROS
+RUN apt install -y --no-install-recommends \
+    python3 python3-pip python3-setuptools python3-rosdep \
+    ca-certificates udev usbutils rsync socat
+
+# Install micro-ROS Agent
+RUN apt install -y --no-install-recommends microros-agent
+
+# TODO: Insert dependencies within this block
+#* ##########################################
+#*
+#* ##########################################
+
+# Clean
+USER root
+RUN apt -y autoremove && apt clean autoclean \
+	&& rm -rf /var/lib/apt/lists/{apt,dpkg,cache,log} /tmp/* /var/tmp/*
+
+# Set user
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+# Set entrypoint
+COPY ./docker/entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+
+RUN echo "source /usr/share/bash-completion/completions/git" >> ~/.bashrc
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
+
+ENV force_color_prompt=yes
+CMD ["bash"]

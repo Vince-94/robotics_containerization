@@ -1,0 +1,38 @@
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.env
+
+# Packages #
+############
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Logs and databases #
+######################
+*.log
+*.sql
+*.sqlite
+
+# Python #
+##########
+*.pyc
+*.pyo
+__pycache__/
+venv/
+env/
+
+# Visual Studio Code #
+######################
+.vscode/
