@@ -36,7 +36,7 @@ def bash_array_assignment(items: List[str]) -> str:
 def generate_config(config: Dict[str, Any], target_arch: str) -> Optional[Dict[str, str]]:
     repo_author = config["repo_author"]
     project_repo = config["project_repo"]
-    volumes_list = config["volumes"]
+    volumes_list = config.get("volumes", [])
     container_env = config["container_env"]
     ros2_distro = config["ros2_distro"]
     middleware = config["middleware"]
