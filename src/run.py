@@ -205,7 +205,6 @@ def run(root_dir: Path, target_arch: Optional[str]) -> None:
     click.echo(f"- main volume: {env['LOCAL_WS_PATH']} -> {env['CONTAINER_WS']}")
 
     # extra volumes
-<<<<<<< HEAD
     extra_volumes = env.get("VOLUMES", [])
     if extra_volumes != "()":
         click.echo("- extra volumes:")
@@ -213,13 +212,6 @@ def run(root_dir: Path, target_arch: Optional[str]) -> None:
             fname = Path(vol).name
             docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{fname}:rw")
             click.echo(f"  - {vol} -> {env['CONTAINER_HOME']}/{fname}")
-=======
-    click.echo("- extra volumes:")
-    for vol in parse_bash_array(env["VOLUMES"]):
-        fname = Path(vol).name
-        docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{fname}:rw")
-        click.echo(f"  - {vol} -> {env['CONTAINER_HOME']}/{fname}")
->>>>>>> f0357a3 (Initial commit)
 
     # platform option
     platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])
