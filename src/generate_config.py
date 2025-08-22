@@ -60,6 +60,12 @@ def generate_config(config: Dict[str, Any], target_arch: str) -> Optional[Dict[s
         print(f"Unsupported ROS2 distribution: {ros2_distro}, Supported distributions: {', '.join(supported_ros2_distro)}")
         return
 
+    # Middleware env
+    middleware_env = {
+        "MIDDLEWARE": middleware,
+        "ROS2_DISTRO": ros2_distro
+    }
+
     # Repo env
     local_project_repo_path = ROOT_DIR / project_repo
     if not local_project_repo_path.is_dir():
@@ -153,7 +159,7 @@ def generate_config(config: Dict[str, Any], target_arch: str) -> Optional[Dict[s
     }
 
     # Final env
-    env_vars = repo_env | volumes_env | container_env | base_image_env | image_env
+    env_vars = middleware_env | repo_env | volumes_env | container_env | base_image_env | image_env
 
     return env_vars
 

@@ -195,31 +195,35 @@ def run(root_dir: Path, target_arch: Optional[str]) -> None:
         sys.exit(0)
 
     # 5) Build docker run command
-    click.echo(
-        f"Run docker container: {container_name} -> {docker_image}:{docker_image_tag}"
-    )
-
     docker_volumes = [
         f"-v{env['LOCAL_WS_PATH']}:{env['CONTAINER_WS']}:rw"
     ]
-    click.echo(f"- main volume: {env['LOCAL_WS_PATH']} -> {env['CONTAINER_WS']}")
 
     # extra volumes
+    for vol in parse_bash_array(env["VOLUMES"]):
+        fname = Path(vol).name
+        docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{fname}:rw")
+
+    # platform option
+    platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])
+
+    # Print info
+    click.echo(
+        f"Run docker container: {container_name} -> {docker_image}:{docker_image_tag}"
+    )
+    click.echo(f"- middleware: {env['MIDDLEWARE']} ({env['ROS2_DISTRO']})")
+    click.echo(f"- main volume: {env['LOCAL_WS_PATH']} -> {env['CONTAINER_WS']}")
     click.echo("- extra volumes:")
     for vol in parse_bash_array(env["VOLUMES"]):
         fname = Path(vol).name
         docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{fname}:rw")
         click.echo(f"  - {vol} -> {env['CONTAINER_HOME']}/{fname}")
-
-    # platform option
-    platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])
-    click.echo(f"- architecture: {env['SOURCE_ARCH']} -> {env['TARGET_ARCH']}")
-    click.echo(f"- platform: {platform_opt or ''}")
+    click.echo(f"- architecture: {env['SOURCE_ARCH']} -> {env['TARGET_ARCH']} ({platform_opt})")
     click.echo(f"- user: {container_user} (UID: {container_uid}, GID: {container_gid})")
     click.echo(f"- command: {container_cmd}")
     click.echo(f"- workspace: {container_ws}")
 
-    # 6) Assemble final docker run
+    # Docker run cmd
     docker_run = [
         "docker", "run", "-it", "--rm", "--privileged",
         "--cap-add", "IPC_LOCK",

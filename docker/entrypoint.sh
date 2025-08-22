@@ -13,15 +13,22 @@ set -e
 # Source
 source ~/.bashrc
 
-# git configuration
+# (Optional) Comment/Uncomment or add/remove git congiguration
 git config --global core.editor "code --wait"
 
-# Source ROS2 workspace
+# TODO Source ROS2
+source /opt/ros/${ROS_DISTRO}/setup.bash
+
+if [ -f /opt/micro_ros_setup/install/local_setup.bash ]; then
+  	source /opt/micro_ros_setup/install/local_setup.bash
+fi
+
 if [[ -d "../install" ]]; then
 	source $CONTAINER_WS/install/local_setup.bash
 fi
 
-# Ubuntu info
+
+# User check
 if ! [[ $USER == $CONTAINER_USR ]] && [[ $UID == $CONTAINER_UID ]]; then
 	echo "User is not set correctly!"
 	if ! [[ $USER == $CONTAINER_USR ]]; then
@@ -31,11 +38,6 @@ if ! [[ $USER == $CONTAINER_USR ]] && [[ $UID == $CONTAINER_UID ]]; then
 	fi
 	exit
 fi
-
-# ROS2 info
-# echo "ROS2 environment:
-#     - ROS $ROS_VERSION: $ROS_DISTRO
-# "
 
 
 if [[ -n "$CI" ]]; then

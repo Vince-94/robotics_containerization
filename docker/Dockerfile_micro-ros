@@ -103,7 +103,7 @@ RUN apt update && apt upgrade -y
 
 # Install development packages (build, cross, flash, debug)
 RUN apt install -y --no-install-recommends \
-    cmake build-essential ninja-build gdb gdb-multiarch lcov \
+    ninja-build gdb gdb-multiarch lcov \
     clang-format clang-tidy doxygen graphviz valgrind \
     pkg-config git-core curl wget unzip
 
@@ -121,6 +121,16 @@ RUN apt install -y --no-install-recommends \
     python3-rosdep \
     python3-colcon-argcomplete \
     python3-colcon-*
+
+# Clone micro_ros_setup
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+RUN mkdir micro_ros_setup && cd micro_ros_setup && git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+RUN cd micro_ros_setup && rosdep update && rosdep install --from-paths src --ignore-src -r -y
+
+SHELL ["/bin/bash", "-lc"]
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && cd micro_ros_setup && colcon build --symlink-install
 
 # TODO: Insert dependencies within this block
 #* ##########################################
@@ -145,6 +155,7 @@ RUN echo "source /usr/share/bash-completion/completions/git" >> ~/.bashrc
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
 RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
 
+# ENV RMW_IMPLEMENTATION=rmw_microxrcedds
 ENV force_color_prompt=yes
 CMD ["bash"]
 
@@ -160,7 +171,18 @@ RUN apt install -y --no-install-recommends \
     python3 python3-pip python3-setuptools python3-rosdep \
     ca-certificates udev usbutils rsync socat
 
-# Install micro-ROS Agent
+# Clone micro_ros_setup
+USER $CONTAINER_USR
+WORKDIR /home/$CONTAINER_USR
+
+RUN mkdir micro_ros_setup && cd micro_ros_setup && git clone -b ${ROS_DISTRO} https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+RUN cd micro_ros_setup && rosdep update && rosdep install --from-paths src --ignore-src -r -y
+
+SHELL ["/bin/bash", "-lc"]
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && cd micro_ros_setup && colcon build --symlink-install
+
+# Install micro-ROS Agent  # TODO to mpove to ROS2 container
+USER root
 RUN apt install -y --no-install-recommends microros-agent
 
 # TODO: Insert dependencies within this block
@@ -185,5 +207,6 @@ RUN echo "source /usr/share/bash-completion/completions/git" >> ~/.bashrc
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
 RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc
 
+# ENV RMW_IMPLEMENTATION=rmw_microxrcedds
 ENV force_color_prompt=yes
 CMD ["bash"]

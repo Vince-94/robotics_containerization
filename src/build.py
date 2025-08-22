@@ -161,12 +161,6 @@ def build(root_dir: Path, target_arch: Optional[str]) -> None:
     BUILD_STAGE = env["BUILD_STAGE"]
     BASE_IMAGE = env["BASE_IMAGE"]
 
-    click.echo(
-        f"Build dockerfile: {DOCKERFILE} -> image: {DOCKER_IMAGE}:{DOCKER_IMAGE_TAG}"
-    )
-    click.echo(f"- base image: {BASE_IMAGE}")
-    click.echo(f"- stage: {BUILD_STAGE}")
-
     # Build args mapping: docker build expects keys (ARG name) -> env var name
     build_arg_map = {
         "CONTAINER_USR": "CONTAINER_USR",
@@ -182,14 +176,23 @@ def build(root_dir: Path, target_arch: Optional[str]) -> None:
         click.echo(f"Build args error: {e}", err=True)
         raise SystemExit(6)
 
+    platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])
+
+    # Print info
+    click.echo(
+        f"Build dockerfile: {DOCKERFILE} -> image: {DOCKER_IMAGE}:{DOCKER_IMAGE_TAG}"
+    )
+    click.echo(f"- base image: {BASE_IMAGE}")
+    click.echo(f"- stage: {BUILD_STAGE}")
+
     click.echo("- args:")
     for k, envname in build_arg_map.items():
         click.echo(f"  - {k}: {env.get(envname)}")
 
-    platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])
-    click.echo(f"- architecture: {env['SOURCE_ARCH']} -> {env['TARGET_ARCH']}")
-    click.echo(f"- platform: {platform_opt or ''}")
+    click.echo(f"- architecture: {env['SOURCE_ARCH']} -> {env['TARGET_ARCH']} ({platform_opt})")
+    click.echo(f"- middleware: {env['MIDDLEWARE']} ({env['ROS2_DISTRO']})")
 
+    # Docker build cmd
     docker_cmd = [
         "docker",
         "build",
