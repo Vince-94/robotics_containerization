@@ -61,12 +61,6 @@ def generate_config(config: Dict[str, Any], target_arch: str) -> Optional[Dict[s
         return
 
     # Repo env
-    local_project_repo_path = ROOT_DIR / project_repo
-    if not local_project_repo_path.is_dir():
-        print(f"Directory does not exist: {local_project_repo_path}")
-        return
-    local_project_repo_path = str(local_project_repo_path)
-
     repo_env = {
         "REPO_AUTHOR": repo_author,
         "PROJECT_REPO": project_repo
@@ -78,13 +72,12 @@ def generate_config(config: Dict[str, Any], target_arch: str) -> Optional[Dict[s
             print(f"Directory does not exist: {volume}")
             return
     volumes_env = {
-        "LOCAL_WS_PATH": local_project_repo_path,
         "VOLUMES": bash_array_assignment(volumes_list)
     }
 
     # Container env
     container_home = f"/home/{container_env['container_usr']}"
-    container_ws = f"{container_home}/{project_repo}"
+    container_ws = f"{container_home}/{Path(volumes_list[0]).name}"
     container_env = {
         "CONTAINER_USR": container_env["container_usr"],
         "CONTAINER_PSW": container_env["container_psw"],

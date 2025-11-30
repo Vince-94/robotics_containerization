@@ -169,7 +169,7 @@ def run(root_dir: Path, target_arch: Optional[str]) -> None:
 
     # required keys
     required = [
-        "DOCKER_IMAGE", "DOCKER_IMAGE_TAG", "DOCKER_CONTAINER", "LOCAL_WS_PATH",
+        "DOCKER_IMAGE", "DOCKER_IMAGE_TAG", "DOCKER_CONTAINER",
         "CONTAINER_WS", "CONTAINER_HOME", "VOLUMES", "TARGET_ARCH", "SOURCE_ARCH",
         "CONTAINER_UID", "CONTAINER_USR", "CONTAINER_GID", "CONTAINER_RUN_CMD",
     ]
@@ -199,17 +199,13 @@ def run(root_dir: Path, target_arch: Optional[str]) -> None:
         f"Run docker container: {container_name} -> {docker_image}:{docker_image_tag}"
     )
 
-    docker_volumes = [
-        f"-v{env['LOCAL_WS_PATH']}:{env['CONTAINER_WS']}:rw"
-    ]
-    click.echo(f"- main volume: {env['LOCAL_WS_PATH']} -> {env['CONTAINER_WS']}")
-
     # extra volumes
+    docker_volumes = []
     click.echo("- extra volumes:")
     for vol in parse_bash_array(env["VOLUMES"]):
-        fname = Path(vol).name
-        docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{fname}:rw")
-        click.echo(f"  - {vol} -> {env['CONTAINER_HOME']}/{fname}")
+        folder_name = Path(vol).name
+        docker_volumes.append(f"-v{vol}:{env['CONTAINER_HOME']}/{folder_name}:rw")
+        click.echo(f"  - {vol} -> {env['CONTAINER_HOME']}/{folder_name}")
 
     # platform option
     platform_opt = choose_platform_option(env["TARGET_ARCH"], env["SOURCE_ARCH"])

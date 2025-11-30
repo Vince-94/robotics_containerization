@@ -60,7 +60,6 @@ def main():
 Project info
 - Name:                 {env.get("PROJECT_REPO", "")}
 - Author:               {env.get("REPO_AUTHOR", "")}
-- Local path:           {env.get("LOCAL_WS_PATH", "")}
 - Extra volumes:        {env.get("VOLUMES", "")}
 
 Image info
